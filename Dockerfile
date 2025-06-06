@@ -4,10 +4,9 @@ ARG NODE_VERSION=20
 # --- ЭТАП 1: Установка системных зависимостей ---
 FROM node:${NODE_VERSION}-alpine AS builder
 
-# ДОБАВЬТЕ ЭТУ СТРОКУ, ЧТОБЫ СБРОСИТЬ КЕШ
-ARG CACHE_BUSTER=1
-
 # Установка системных зависимостей, включая tini
+# "Взломщик кеша" ниже заставит эту команду выполниться заново
+ARG CACHE_BUSTER=2
 RUN apk add --no-cache --update git openssh graphicsmagick tini tzdata ca-certificates msttcorefonts-installer fontconfig && \
 	update-ms-fonts && \
 	fc-cache -f
