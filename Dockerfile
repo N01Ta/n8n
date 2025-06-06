@@ -41,5 +41,5 @@ COPY --from=build /usr/src/app .
 VOLUME /home/node/.n8n
 EXPOSE 5678
 USER node
-ENTRYPOINT ["/sbin/tini", "--"]
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["n8n"]
