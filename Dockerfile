@@ -1,37 +1,36 @@
-# Версия Node.js
+# ИСПОЛЬЗУЕМ ТОЛЬКО ОДИН ЭТАП
+# Используем требуемую версию Node.js
 ARG NODE_VERSION=22
 FROM node:${NODE_VERSION}-alpine
 
-# 1. Устанавливаем системные зависимости
+# Устанавливаем системные зависимости, НО БЕЗ TINI, чтобы обойти баг платформы
 RUN apk add --no-cache --update git openssh graphicsmagick tzdata ca-certificates msttcorefonts-installer fontconfig && \
 	update-ms-fonts && \
 	fc-cache -f
 
-# 2. Устанавливаем нужные npm-пакеты глобально
-RUN npm install -g pnpm full-icu tini
+# Устанавливаем pnpm и FULL-ICU
+RUN npm install -g pnpm full-icu
 
-# 3. Создаем рабочую директорию
+# Устанавливаем рабочую директорию
 WORKDIR /home/node
 
-# 4. Копируем код приложения
+# Копируем ВЕСЬ код
 COPY . .
 
-# 5. Устанавливаем зависимости приложения
+# Устанавливаем ТОЛЬКО production-зависимости
 RUN pnpm install -r --prod --frozen-lockfile --ignore-scripts
 
-# 6. Устанавливаем переменные окружения для запуска
+# ВАЖНО: Устанавливаем переменную для интернационализации
 ENV NODE_ICU_DATA=/usr/local/lib/node_modules/full-icu
 
-# 7. Объявляем том для данных
+# Указываем, что данные n8n (воркфлоу, креды) должны храниться в этой папке.
 VOLUME /home/node/.n8n
 
-# 8. Открываем порт
+# Открываем порт
 EXPOSE 5678
 
-# 9. Устанавливаем пользователя для безопасности
+# Устанавливаем пользователя
 USER node
 
-# 10. Точка входа и команда
-# Используем tini, который мы установили через npm. Он будет лежать в /usr/local/bin/
-ENTRYPOINT ["/usr/local/bin/tini", "--"]
-CMD ["n8n"]
+# ЗАПУСКАЕМСЯ НАПРЯМУЮ, БЕЗ TINI, чтобы обойти баг платформы
+CMD ["node", "./packages/cli/bin/n8n"]
