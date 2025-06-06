@@ -3,8 +3,8 @@
 ARG NODE_VERSION=22
 FROM node:${NODE_VERSION}-alpine
 
-# Устанавливаем ВСЕ системные зависимости прямо здесь
-RUN apk add --no-cache --update git openssh graphicsmagick tini tzdata ca-certificates msttcorefonts-installer fontconfig && \
+# Устанавливаем ВСЕ системные зависимости, но БЕЗ TINI
+RUN apk add --no-cache --update git openssh graphicsmagick tzdata ca-certificates msttcorefonts-installer fontconfig && \
 	update-ms-fonts && \
 	fc-cache -f
 
@@ -29,6 +29,5 @@ EXPOSE 5678
 # Устанавливаем пользователя
 USER node
 
-# ЗАПУСКАЕМСЯ. Tini был установлен на этом же слое, он ОБЯЗАН быть здесь.
-ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["n8n"]
+# ЗАПУСКАЕМСЯ НАПРЯМУЮ ЧЕРЕЗ NODE
+CMD ["node", "./packages/cli/bin/n8n"]
