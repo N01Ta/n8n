@@ -1,29 +1,32 @@
-# Использовать версию Node.js, которая рекомендуется для n8n. 22 может быть слишком новой. 
-# Лучше свериться с package.json вашего форка. Давайте для примера оставим 20.
+# Использовать версию Node.js, которая рекомендуется для n8n. 20 - хороший выбор.
 ARG NODE_VERSION=20
 
-# --- ЭТАП 1: Сборка зависимостей и окружения ---
+# --- ЭТАП 1: Установка системных зависимостей ---
 FROM node:${NODE_VERSION}-alpine AS builder
 
-# Установка системных зависимостей, как у вас и было
-RUN apk add --update git openssh graphicsmagick tini tzdata ca-certificates libc6-compat jq msttcorefonts-installer fontconfig && \
+# Установка системных зависимостей, включая tini
+RUN apk add --no-cache --update git openssh graphicsmagick tini tzdata ca-certificates msttcorefonts-installer fontconfig && \
 	update-ms-fonts && \
 	fc-cache -f
 
 # Установка pnpm - стандартный менеджер пакетов для n8n
 RUN npm install -g pnpm
 
-# --- ЭТАП 2: Сборка самого приложения n8n ---
+# --- ЭТАП 2: Сборка приложения n8n ---
 FROM builder AS build
 
 # Устанавливаем рабочую директорию
 WORKDIR /usr/src/app
 
-# Копируем файлы с описанием зависимостей
-COPY package.json pnpm-lock.yaml ./
+# Копируем файлы с описанием зависимостей.
+# pnpm-lock.yaml может отсутствовать в вашем форке, это не страшно, Docker справится.
+# Но если он есть, его нужно копировать.
+COPY package.json pnpm-lock.yaml* ./
 
-# Устанавливаем только 'production' зависимости, чтобы образ был меньше
-RUN pnpm install --prod --frozen-lockfile
+# Устанавливаем ТОЛЬКО production зависимости, чтобы образ был меньше и сборка быстрее.
+# `pnpm fetch` кеширует зависимости, `pnpm install` их устанавливает из кеша.
+RUN pnpm fetch --prod
+RUN pnpm install -r --prod --offline
 
 # Копируем весь исходный код вашего форка в образ
 COPY . .
@@ -32,7 +35,7 @@ COPY . .
 RUN pnpm build
 
 # --- ЭТАП 3: Финальный, легковесный образ для запуска ---
-FROM node:${NODE_VERSION}-alpine
+FROM node:${NODE_VERSION}-alpine AS final
 
 # Копируем системные зависимости из первого этапа
 COPY --from=builder /usr/bin/tini /usr/bin/tini
