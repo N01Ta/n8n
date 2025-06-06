@@ -1,38 +1,60 @@
-ARG NODE_VERSION=22
+# Использовать версию Node.js, которая рекомендуется для n8n. 22 может быть слишком новой. 
+# Лучше свериться с package.json вашего форка. Давайте для примера оставим 20.
+ARG NODE_VERSION=20
 
-# 1. Use a builder step to download various dependencies
+# --- ЭТАП 1: Сборка зависимостей и окружения ---
 FROM node:${NODE_VERSION}-alpine AS builder
 
-# Install fonts
-RUN	\
-	apk --no-cache add --virtual fonts msttcorefonts-installer fontconfig && \
+# Установка системных зависимостей, как у вас и было
+RUN apk add --update git openssh graphicsmagick tini tzdata ca-certificates libc6-compat jq msttcorefonts-installer fontconfig && \
 	update-ms-fonts && \
-	fc-cache -f && \
-	apk del fonts && \
-	find  /usr/share/fonts/truetype/msttcorefonts/ -type l -exec unlink {} \;
+	fc-cache -f
 
-# Install git and other OS dependencies
-RUN apk add --update git openssh graphicsmagick tini tzdata ca-certificates libc6-compat jq
+# Установка pnpm - стандартный менеджер пакетов для n8n
+RUN npm install -g pnpm
 
-# Update npm and install full-uci
-COPY .npmrc /usr/local/etc/npmrc
-RUN npm install -g corepack@0.33 full-icu@1.5.0
+# --- ЭТАП 2: Сборка самого приложения n8n ---
+FROM builder AS build
 
-# Activate corepack, and install pnpm
-WORKDIR /tmp
-COPY package.json ./
-RUN corepack enable && corepack prepare --activate
+# Устанавливаем рабочую директорию
+WORKDIR /usr/src/app
 
-# Cleanup
-RUN	rm -rf /lib/apk/db /var/cache/apk/ /tmp/* /root/.npm /root/.cache/node /opt/yarn*
+# Копируем файлы с описанием зависимостей
+COPY package.json pnpm-lock.yaml ./
 
-# 2. Start with a new clean image and copy over the added files into a single layer
+# Устанавливаем только 'production' зависимости, чтобы образ был меньше
+RUN pnpm install --prod --frozen-lockfile
+
+# Копируем весь исходный код вашего форка в образ
+COPY . .
+
+# Запускаем команду сборки n8n
+RUN pnpm build
+
+# --- ЭТАП 3: Финальный, легковесный образ для запуска ---
 FROM node:${NODE_VERSION}-alpine
-COPY --from=builder / /
 
-# Delete this folder to make the base image backward compatible to be able to build older version images
-RUN rm -rf /tmp/v8-compile-cache*
+# Копируем системные зависимости из первого этапа
+COPY --from=builder /usr/bin/tini /usr/bin/tini
+COPY --from=builder /usr/share/fonts/truetype/msttcorefonts/ /usr/share/fonts/truetype/msttcorefonts/
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
+# Устанавливаем рабочую директорию, куда будем копировать собранное приложение
 WORKDIR /home/node
-ENV NODE_ICU_DATA=/usr/local/lib/node_modules/full-icu
-EXPOSE 5678/tcp
+
+# Копируем собранное приложение из этапа 'build'
+COPY --from=build /usr/src/app .
+
+# Указываем, что данные n8n (воркфлоу, креды) должны храниться в этой папке.
+# Это намек для Docker и платформ, что эту папку стоит выносить в volume.
+VOLUME /home/node/.n8n
+
+# Открываем порт, на котором работает n8n
+EXPOSE 5678
+
+# Устанавливаем пользователя, от которого будет работать приложение (безопасность)
+USER node
+
+# Команда для запуска n8n через 'tini' (для корректной обработки сигналов)
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["n8n"]
