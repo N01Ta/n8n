@@ -1,4 +1,4 @@
-# ИЗМЕНЕНИЕ: Указываем требуемую версию Node.js
+# Используем требуемую версию Node.js
 ARG NODE_VERSION=22
 
 # --- ЭТАП 1: Установка системных зависимостей ---
@@ -18,11 +18,10 @@ WORKDIR /usr/src/app
 # Копируем всё, что нужно для установки зависимостей
 COPY package.json pnpm-lock.yaml* ./
 COPY patches ./patches
-# Копируем папку scripts, так как там есть preinstall скрипты
 COPY scripts ./scripts
 
-# Устанавливаем зависимости
-RUN pnpm install -r --prod --frozen-lockfile
+# ИЗМЕНЕНИЕ: Добавляем флаг --ignore-scripts, чтобы пропустить dev-скрипты типа lefthook
+RUN pnpm install -r --prod --frozen-lockfile --ignore-scripts
 
 # Копируем весь остальной исходный код
 COPY . .
