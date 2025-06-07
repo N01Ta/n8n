@@ -1,36 +1,37 @@
-# ИСПОЛЬЗУЕМ ТОЛЬКО ОДИН ЭТАП
-# Используем требуемую версию Node.js
+# Версия Node.js
 ARG NODE_VERSION=22
 FROM node:${NODE_VERSION}-alpine
 
-# Устанавливаем системные зависимости, НО БЕЗ TINI, чтобы обойти баг платформы
-RUN apk add --no-cache --update git openssh graphicsmagick tzdata ca-certificates msttcorefonts-installer fontconfig && \
-	update-ms-fonts && \
-	fc-cache -f
+# 1. Устанавливаем системные зависимости
+RUN apk add --no-cache --update git openssh graphicsmagick tzdata ca-certificates msttcorefonts-installer fontconfig
 
-# Устанавливаем pnpm и FULL-ICU
+# 2. Устанавливаем нужные npm-пакеты глобально
 RUN npm install -g pnpm full-icu
 
-# Устанавливаем рабочую директорию
+# 3. Создаем рабочую директорию
 WORKDIR /home/node
 
-# Копируем ВЕСЬ код
+# 4. Копируем код приложения
 COPY . .
 
-# Устанавливаем ТОЛЬКО production-зависимости
+# 5. Устанавливаем зависимости приложения
 RUN pnpm install -r --prod --frozen-lockfile --ignore-scripts
 
-# ВАЖНО: Устанавливаем переменную для интернационализации
+# 6. Устанавливаем переменные окружения для запуска
 ENV NODE_ICU_DATA=/usr/local/lib/node_modules/full-icu
 
-# Указываем, что данные n8n (воркфлоу, креды) должны храниться в этой папке.
+# 7. **ВАЖНОЕ ИЗМЕНЕНИЕ: Меняем владельца всех файлов**
+# Это нужно сделать ПЕРЕД переключением на пользователя 'node'
+RUN chown -R node:node /home/node
+
+# 8. Объявляем том для данных
 VOLUME /home/node/.n8n
 
-# Открываем порт
+# 9. Открываем порт
 EXPOSE 5678
 
-# Устанавливаем пользователя
+# 10. Устанавливаем пользователя для безопасности
 USER node
 
-# ЗАПУСКАЕМСЯ НАПРЯМУЮ, БЕЗ TINI, чтобы обойти баг платформы
+# 11. Запускаемся напрямую, БЕЗ TINI, чтобы обойти баг платформы
 CMD ["node", "./packages/cli/bin/n8n"]
